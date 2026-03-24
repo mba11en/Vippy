@@ -50,6 +50,7 @@
                                         <label for="date" class="form-label">Date</label>
                                         <input type="text" class="form-control" id="date" value="<%= album.date %>"
                                             placeholder="Select Date">
+                                        <div class="form-text text-secondary">Albums dated after today stay hidden on the public site unless Jekyll future posts are enabled.</div>
                                     </div>
 
                                     <div class="mb-3">
@@ -57,6 +58,21 @@
                                         <input type="text" class="form-control" id="tags"
                                             value="<%= album.tags ? album.tags.join(', ') : '' %>"
                                             placeholder="e.g. cinematic, portrait, landscape">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="parentAlbum" class="form-label">Parent Album</label>
+                                        <select class="form-select" id="parentAlbum">
+                                            <option value="">None (top-level album)</option>
+                                            <% (albums || []).forEach(function(candidate) { %>
+                                                <% if (candidate.slug !== album.slug) { %>
+                                                    <option value="<%= candidate.slug %>" <%= candidate.slug === album.parentAlbum ? 'selected' : '' %>>
+                                                        <%= candidate.title %>
+                                                    </option>
+                                                <% } %>
+                                            <% }); %>
+                                        </select>
+                                        <div class="form-text text-secondary">Child albums will appear inside this album on the public site.</div>
                                     </div>
 
                                     <div id="detailsAlertContainer"></div>
@@ -891,7 +907,9 @@
                     const data = await response.json();
                     if (data.success) {
                         showAlert('success', 'Preview settings saved!', document.getElementById('previewAlertContainer'));
-                        }
+                    } else {
+                        showAlert('danger', data.error || 'Error saving preview settings', document.getElementById('previewAlertContainer'));
+                    }
                 } catch (err) {
                     showAlert('danger', 'Error saving settings', document.getElementById('previewAlertContainer'));
                 }
@@ -911,13 +929,16 @@
                             developer: document.getElementById('developer').value,
                             description: document.getElementById('description').value,
                             date: document.getElementById('date').value,
-                            tags: document.getElementById('tags').value
+                            tags: document.getElementById('tags').value,
+                            parentAlbum: document.getElementById('parentAlbum').value
                         })
                     });
                     const data = await response.json();
                     if (data.success) {
                         showAlert('success', 'Details saved!', document.getElementById('detailsAlertContainer'));
-                        }
+                    } else {
+                        showAlert('danger', data.error || 'Error saving details', document.getElementById('detailsAlertContainer'));
+                    }
                 } catch (err) {
                     showAlert('danger', 'Error saving details', document.getElementById('detailsAlertContainer'));
                 }

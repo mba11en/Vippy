@@ -7,7 +7,7 @@
   {%- comment -%} Collect all VP posts {%- endcomment -%}
   {%- assign vp_posts = "" | split: "" -%}
   {%- for post in site.posts -%}
-    {%- if post.categories contains "virtual-photography" -%}
+    {%- if post.categories contains "virtual-photography" and post["parent-album"] == blank -%}
       {%- assign vp_posts = vp_posts | push: post -%}
     {%- endif -%}
   {%- endfor -%}
@@ -18,7 +18,7 @@
     {%- for slug in album_order -%}
       {%- for post in vp_posts -%}
         {%- if post.slug == slug -%}
-          {% include virtual-photography/post-card.html %}
+          {% include virtual-photography/post-card.html post_item=post %}
         {%- endif -%}
       {%- endfor -%}
     {%- endfor -%}
@@ -26,13 +26,13 @@
     {%- comment -%} Then output any albums not in the order list (newest first) {%- endcomment -%}
     {%- for post in vp_posts -%}
       {%- unless album_order contains post.slug -%}
-        {% include virtual-photography/post-card.html %}
+        {% include virtual-photography/post-card.html post_item=post %}
       {%- endunless -%}
     {%- endfor -%}
   {%- else -%}
     {%- comment -%} No custom order, show all by date (default) {%- endcomment -%}
     {%- for post in vp_posts -%}
-      {% include virtual-photography/post-card.html %}
+      {% include virtual-photography/post-card.html post_item=post %}
     {%- endfor -%}
   {%- endif -%}
 
