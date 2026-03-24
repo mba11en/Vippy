@@ -620,7 +620,7 @@ app.post('/vippy/blog/save', upload.single('headerImage'), async (req, res) => {
         const newFilename = `${actualDate}-${slug}.md`;
 
         const frontMatter = {
-            layout: 'post',
+            layout: 'blog-post',
             title,
             date: actualDate,
             author,
