@@ -225,17 +225,27 @@ async function getAlbums() {
     try {
         const jsonFiles = (await fs.readdir(DATA_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
         const postFilesList = (await fs.readdir(POSTS_DIR)).filter(f => f.endsWith('.md'));
+        const postIndex = new Map();
+
+        for (const postFile of postFilesList) {
+            const postPath = path.join(POSTS_DIR, postFile);
+            const postContent = await fs.readFile(postPath, 'utf8');
+            const { data: frontMatter } = matter(postContent);
+
+            if (!frontMatter.slug) continue;
+            postIndex.set(frontMatter.slug, {
+                postFile,
+                frontMatter
+            });
+        }
 
         const albumPromises = jsonFiles.map(async (jsonFile) => {
             const slug = jsonFile.replace('.json', '');
             const jsonPath = path.join(DATA_DIR, jsonFile);
-            const postFile = postFilesList.find(f => f.endsWith(`${slug}.md`));
+            const postEntry = postIndex.get(slug);
 
-            if (!postFile) return null;
-
-            const postPath = path.join(POSTS_DIR, postFile);
-            const postContent = await fs.readFile(postPath, 'utf8');
-            const { data: frontMatter } = matter(postContent);
+            if (!postEntry) return null;
+            const { postFile, frontMatter } = postEntry;
 
             let images = [];
             try {
@@ -262,6 +272,7 @@ async function getAlbums() {
                 description: frontMatter.description || 'Virtual Photography',
                 developer: frontMatter.developer || '',
                 date: frontMatter.date || '',
+                parentAlbum: frontMatter['parent-album'] || '',
                 tags,
                 cardImage: parseInt(frontMatter['card-image']) || 0,
                 cardOffset: parseInt(frontMatter['card-offset']) || 50,
@@ -316,6 +327,28 @@ function createSlug(name) {
     });
 }
 
+function normalizeAlbumDate(input) {
+    if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.trim())) {
+        return input.trim();
+    }
+
+    if (input) {
+        const parsed = new Date(input);
+        if (!Number.isNaN(parsed.getTime())) {
+            const year = parsed.getFullYear();
+            const month = String(parsed.getMonth() + 1).padStart(2, '0');
+            const day = String(parsed.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+    }
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // Helper: Generate post markdown with gray-matter
 function generatePostMarkdown(data) {
     const frontMatter = {
@@ -336,7 +369,31 @@ function generatePostMarkdown(data) {
         'banner-offset-x': data.bannerOffsetX || 50,
         'banner-zoom': data.bannerZoom || 100
     };
+
+    if (data.parentAlbum) {
+        frontMatter['parent-album'] = data.parentAlbum;
+    }
+
     return matter.stringify('', frontMatter);
+}
+
+function getAlbumDescendantSlugs(albums, slug) {
+    const descendants = new Set();
+    const queue = [slug];
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        const children = albums.filter(album => album.parentAlbum === current);
+
+        children.forEach(child => {
+            if (!descendants.has(child.slug)) {
+                descendants.add(child.slug);
+                queue.push(child.slug);
+            }
+        });
+    }
+
+    return descendants;
 }
 
 // Helper: Get album order
@@ -793,22 +850,32 @@ app.get('/vippy/vp', async (req, res) => {
     res.render('vp-dashboard', { albums, hasB2Config });
 });
 
-app.get('/vippy/vp/new', (req, res) => {
+app.get('/vippy/vp/new', async (req, res) => {
     const hasB2Config = b2Config && b2Config.application_key_id && b2Config.application_key && b2Config.bucket_id;
     if (!hasB2Config) return res.redirect('/vippy/vp');
-    res.render('new-album');
+    const albums = await getAlbums();
+    res.render('new-album', { albums });
 });
 
 app.post('/vippy/vp/create', upload.array('images', 100), async (req, res) => {
     try {
-        const { title, developer, description, date } = req.body;
+        const { title, developer, description, date, parentAlbum } = req.body;
         const slug = createSlug(title);
-        const actualDate = date || new Date().toISOString().split('T')[0];
+        const actualDate = normalizeAlbumDate(date);
 
         const jsonPath = path.join(DATA_DIR, `${slug}.json`);
         const exists = await fs.access(jsonPath).then(() => true).catch(() => false);
         if (exists) {
             return res.status(400).json({ error: 'Album with this name already exists' });
+        }
+
+        const normalizedParentAlbum = typeof parentAlbum === 'string' ? parentAlbum.trim() : '';
+        if (normalizedParentAlbum) {
+            const albums = await getAlbums();
+            const parentExists = albums.some(album => album.slug === normalizedParentAlbum);
+            if (!parentExists) {
+                return res.status(400).json({ error: 'Selected parent album was not found' });
+            }
         }
 
         const images = [];
@@ -850,7 +917,7 @@ app.post('/vippy/vp/create', upload.array('images', 100), async (req, res) => {
         const postFileName = `${actualDate}-${slug}.md`;
         const postPath = path.join(POSTS_DIR, postFileName);
         const postContent = generatePostMarkdown({
-            title, developer, description, date: actualDate, slug
+            title, developer, description, date: actualDate, slug, parentAlbum: normalizedParentAlbum
         });
         await fs.writeFile(postPath, postContent);
 
@@ -864,27 +931,46 @@ app.post('/vippy/vp/create', upload.array('images', 100), async (req, res) => {
 app.get('/vippy/vp/edit/:slug', async (req, res) => {
     const album = await getAlbum(req.params.slug);
     if (!album) return res.status(404).send('Album not found');
-    res.render('edit-album', { album });
+    const albums = await getAlbums();
+    res.render('edit-album', { album, albums });
 });
 
 app.post('/vippy/vp/update/:slug', async (req, res) => {
     try {
-        const album = await getAlbum(req.params.slug);
+        const albums = await getAlbums();
+        const album = albums.find(a => a.slug === req.params.slug);
         if (!album) return res.status(404).json({ error: 'Album not found' });
 
-        const { title, description, developer, date, tags, cardImage, cardOffset, cardOffsetX, cardZoom, bannerImage, bannerOffset, bannerOffsetX, bannerZoom } = req.body;
+        const { title, description, developer, date, tags, parentAlbum, cardImage, cardOffset, cardOffsetX, cardZoom, bannerImage, bannerOffset, bannerOffsetX, bannerZoom } = req.body;
+        const normalizedParentAlbum = typeof parentAlbum === 'string' ? parentAlbum.trim() : '';
+
+        if (normalizedParentAlbum === album.slug) {
+            return res.status(400).json({ error: 'An album cannot be its own parent' });
+        }
+
+        if (normalizedParentAlbum) {
+            const parentExists = albums.some(candidate => candidate.slug === normalizedParentAlbum);
+            if (!parentExists) {
+                return res.status(400).json({ error: 'Selected parent album was not found' });
+            }
+
+            const descendants = getAlbumDescendantSlugs(albums, album.slug);
+            if (descendants.has(normalizedParentAlbum)) {
+                return res.status(400).json({ error: 'You cannot move an album inside one of its own child albums' });
+            }
+        }
 
         let parsedTags = album.tags;
         if (tags !== undefined) {
             parsedTags = typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(t => t) : tags;
         }
 
-        const newDate = date || album.date;
+        const newDate = date !== undefined ? normalizeAlbumDate(date) : album.date;
         const oldPostPath = path.join(POSTS_DIR, album.postFile);
         let newPostPath = oldPostPath;
 
-        if (date && date !== album.date) {
-            const newFileName = `${date}-${album.slug}.md`;
+        if (newDate && newDate !== album.date) {
+            const newFileName = `${newDate}-${album.slug}.md`;
             newPostPath = path.join(POSTS_DIR, newFileName);
             const exists = await fs.access(oldPostPath).then(() => true).catch(() => false);
             if (exists) await fs.rename(oldPostPath, newPostPath);
@@ -897,6 +983,7 @@ app.post('/vippy/vp/update/:slug', async (req, res) => {
             date: newDate,
             tags: parsedTags,
             slug: album.slug,
+            parentAlbum: parentAlbum !== undefined ? normalizedParentAlbum : album.parentAlbum,
             cardImage: cardImage !== undefined ? parseInt(cardImage) : album.cardImage,
             cardOffset: cardOffset !== undefined ? parseInt(cardOffset) : album.cardOffset,
             cardOffsetX: cardOffsetX !== undefined ? parseInt(cardOffsetX) : album.cardOffsetX,

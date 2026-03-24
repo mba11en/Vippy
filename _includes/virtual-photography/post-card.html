@@ -1,4 +1,5 @@
 {%- comment -%} Default Styles {%- endcomment -%}
+{%- assign post = include.post_item | default: post -%}
 {%- assign card_style  = '' -%}
 {%- assign text_style  = 'text-themed' -%}
 {%- assign badge_style = 'badge-dark' -%}
@@ -133,12 +134,13 @@
 
 </style>
 
-{%- assign card_data = site.data.virtual-photography[post.slug][post.card-image] -%}
-{%- assign card_url = card_data.url -%}
+{%- assign album_images = site.data.virtual-photography[post.slug] -%}
+{%- assign card_data = album_images[post["card-image"]] | default: album_images[0] -%}
+{%- assign card_url = card_data.url | default: '/assets/images/placeholder-album.png' -%}
 
 <div class="col-lg-4 col-md-6 col-sm-12 my-3 wow animated fadeIn" data-wow-delay=".15s">
   <a href="{{ post_url }}" class="vp card text-themed" {%- if post.external_url and site.open_new_tab -%} target="_blank" {%- endif -%} style="overflow: hidden;">
-    <img loading="lazy" src="{{ card_url }}" alt="{{ post.title }}" class="card-img-top" data-offset-x="{{ post.card-offset-x | default: 50 }}" data-offset-y="{{ post.card-offset | default: 50 }}" data-zoom="{{ post.card-zoom | default: 100 | divided_by: 100.0 }}" style="height: 550px; object-fit: cover; width: 100%;">
+    <img loading="lazy" src="{{ card_url }}" alt="{{ post.title }}" class="card-img-top" data-offset-x="{{ post["card-offset-x"] | default: 50 }}" data-offset-y="{{ post["card-offset"] | default: 50 }}" data-zoom="{{ post["card-zoom"] | default: 100 | divided_by: 100.0 }}" style="height: 550px; object-fit: cover; width: 100%;">
     <div class="card-img-overlay">
       <h3 class="card-title">{{ post.title }}</h3>
       

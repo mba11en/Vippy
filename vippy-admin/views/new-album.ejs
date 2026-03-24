@@ -171,11 +171,24 @@
                                 <textarea class="form-control" id="description" name="description" rows="3"
                                           placeholder="Brief description..."></textarea>
                             </div>
+
+                            <div class="mb-3">
+                                <label for="parentAlbum" class="form-label text-primary small fw-bold">Parent Album</label>
+                                <select class="form-select" id="parentAlbum" name="parentAlbum">
+                                    <option value="">None (top-level album)</option>
+                                    <% (albums || []).forEach(function(album) { %>
+                                        <option value="<%= album.slug %>"><%= album.title %></option>
+                                    <% }); %>
+                                </select>
+                                <div class="form-text text-secondary">Choose a parent if this should live inside another album.</div>
+                            </div>
                             
                             <div class="mb-3">
                                 <label for="date" class="form-label text-primary small fw-bold">Date</label>
                                 <input type="date" class="form-control" id="date" name="date"
-                                       value="<%= new Date().toISOString().split('T')[0] %>">
+                                       value="<%= new Date().toISOString().split('T')[0] %>"
+                                       max="<%= new Date().toISOString().split('T')[0] %>">
+                                <div class="form-text text-secondary">Albums dated after today stay hidden on the public site unless Jekyll future posts are enabled.</div>
                             </div>
                         </div>
                     </div>
@@ -430,6 +443,7 @@
             formData.append('developer', document.getElementById('developer').value);
             formData.append('description', document.getElementById('description').value);
             formData.append('date', document.getElementById('date').value);
+            formData.append('parentAlbum', document.getElementById('parentAlbum').value);
             
             const isCompressEnabled = document.getElementById('compressToggle').checked;
             const isResizeEnabled = document.getElementById('resizeToggle').checked;
