@@ -37,7 +37,7 @@ defaults:
       path: _posts
       type: posts
     values:
-      layout: post
+      layout: blog-post
       comments: false
 sass:
   style: compressed
